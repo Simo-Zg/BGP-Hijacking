@@ -1,0 +1,5 @@
+show.txt
+.vscode-sandbox
+__pycache__/
+.pytest_cache/
+*.pyc

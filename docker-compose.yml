@@ -1,0 +1,83 @@
+services:
+  victim-r1:
+    image: quay.io/frrouting/frr:10.5.0
+    container_name: victim-r1
+    privileged: true
+    volumes:
+      - ./configs/daemons:/etc/frr/daemons
+      - ./configs/vtysh.conf:/etc/frr/vtysh.conf
+      - ./configs/victim_frr.conf:/etc/frr/frr.conf
+    networks:
+      link_r1_r2:
+        ipv4_address: 10.100.12.11
+
+  isp-r2:
+    image: quay.io/frrouting/frr:10.5.0
+    container_name: isp-r2
+    privileged: true
+    volumes:
+      - ./configs/daemons:/etc/frr/daemons
+      - ./configs/vtysh.conf:/etc/frr/vtysh.conf
+      - ./configs/isp_frr.conf:/etc/frr/frr.conf
+    networks:
+      link_r1_r2:
+        ipv4_address: 10.100.12.12
+      link_r2_r3:
+        ipv4_address: 10.100.23.12
+
+  attacker-r3:
+    image: quay.io/frrouting/frr:10.5.0
+    container_name: attacker-r3
+    privileged: true
+    volumes:
+      - ./configs/daemons:/etc/frr/daemons
+      - ./configs/vtysh.conf:/etc/frr/vtysh.conf
+      - ./configs/attacker_frr.conf:/etc/frr/frr.conf
+    networks:
+      link_r2_r3:
+        ipv4_address: 10.100.23.13
+
+  exabgp-monitor:
+    image: python:3.9-slim
+    container_name: exabgp-monitor
+    volumes:
+      - ./monitor:/app
+      - ./logs:/app/logs
+      - ./metrics:/app/metrics
+    environment:
+      - EXABGP_DAEMON_USER=root
+      - EXABGP_API_CLI=false
+      - PYTHONUNBUFFERED=1
+      - BGP_LAB_LOG_DIR=/app/logs
+      - BGP_LAB_METRICS_DIR=/app/metrics
+    command: >
+      sh -c "mkdir -p /app/logs /app/metrics
+      && chmod -R a+rwX /app/logs /app/metrics || true;
+      pip install exabgp scikit-learn numpy
+      && chmod +x /app/detect.py
+      && exabgp /app/exabgp.conf"
+    networks:
+      link_r1_r2:
+        ipv4_address: 10.100.12.14
+
+  rpki-server:
+    image: cloudflare/gortr
+    container_name: rpki-server
+    command: -bind :8282 -verify=false -checktime=false -cache /app/roas.json
+    volumes:
+      - ./rpki:/app
+    networks:
+      link_r1_r2:
+        ipv4_address: 10.100.12.15
+
+networks:
+  link_r1_r2:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.100.12.0/24
+  link_r2_r3:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.100.23.0/24
